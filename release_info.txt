@@ -1,4 +1,4 @@
-app_name: zlan-firwall-installer
+app_name: zlan-firewall-installer
 version: 1.0.0
 maintainer: NetFoundry
 depends: zfw, filebeat

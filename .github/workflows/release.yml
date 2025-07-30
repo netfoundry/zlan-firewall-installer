@@ -86,6 +86,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
       - build_release
+      - deploy_release
     strategy:
       matrix:
         arch: [amd64, arm64]
