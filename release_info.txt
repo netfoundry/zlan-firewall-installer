@@ -1,0 +1,5 @@
+app_name: zlan-firwall-installer
+version: 1.0.0
+maintainer: NetFoundry
+depends: zfw, filebeat
+description: Installs the zlan-firewall and its dependencies on a Linux system.

@@ -1,0 +1,146 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs: 
+  build_release:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+
+    outputs:
+      version: ${{ steps.release_info.outputs.version }}
+      app_name: ${{ steps.release_info.outputs.app_name }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Read release info
+        id: release_info
+        run: |
+          while IFS=":" read -r key value; do
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | xargs)
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          done < release_info.txt
+
+      - name: Set dynamic paths
+        id: vars
+        run: |
+          echo "deb_dir=${{ steps.release_info.outputs.app_name }}_${{ steps.release_info.outputs.version }}_${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
+          echo "deb_file=${{ steps.release_info.outputs.app_name }}_${{ steps.release_info.outputs.version }}_${{ matrix.arch }}.deb" >> "$GITHUB_OUTPUT"
+
+      - name: Setup build directory
+        run: |
+          mkdir -p ${{ steps.vars.outputs.deb_dir }}/DEBIAN
+
+      - name: Generate control file
+        run: |
+          cat <<EOF > ${{ steps.vars.outputs.deb_dir }}/DEBIAN/control
+          Package: ${{ steps.release_info.outputs.app_name }}
+          Version: ${{ steps.release_info.outputs.version }}
+          Section: net
+          Priority: optional
+          Architecture: ${{ matrix.arch }}
+          Maintainer: ${{ steps.release_info.outputs.maintainer }}
+          Depends: ${{ steps.release_info.outputs.depends }}
+          Description: ${{ steps.release_info.outputs.description }}
+          EOF
+
+      - name: Build Deb package    
+        run: |
+          dpkg-deb --build -Z gzip --root-owner-group \
+            ${{ steps.vars.outputs.deb_dir }} \
+            ${{ steps.vars.outputs.deb_file }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: artifact-${{ steps.release_info.outputs.app_name }}-${{ matrix.arch }}-deb
+          path: ${{ steps.vars.outputs.deb_file }}
+
+  deploy_packages:
+    runs-on: ubuntu-22.04
+    needs:
+      - build_release
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        pkg_type: [deb]
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: artifact-${{ needs.build_release.outputs.app_name }}-${{ matrix.arch }}-deb
+
+      - name: Upload to GitHub Release
+        uses: svenstaro/upload-release-action@2.9.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          file: ./${{ needs.build_release.outputs.app_name }}_${{ needs.build_release.outputs.version }}_${{ matrix.arch }}.deb
+          release_name: ${{ needs.build_release.outputs.version }}
+          tag: v${{ needs.build_release.outputs.version }}
+
+  upload_jfrog:
+    runs-on: ubuntu-22.04
+    needs:
+      - build_release
+      - deploy_packages
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        pkg_type: [deb]
+        distro_name: [focal, jammy, noble]
+
+    steps:
+      - name: Configure jFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+
+      - name: Upload DEB to Artifactory
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JF_USER: ${{ secrets.JF_USER }}
+          JF_PASSWORD: ${{ secrets.JF_PASSWORD }}
+          APP_NAME: ${{ needs.build_release.outputs.app_name }}
+          VERSION: ${{ needs.build_release.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          PKG_TYPE: ${{ matrix.pkg_type }}
+          DISTRO_NAME: ${{ matrix.distro_name }}
+        shell: bash
+        run: |
+          set -e
+          ASSET_NAME="${APP_NAME}_${VERSION}_${ARCH}.${PKG_TYPE}"
+          echo "Looking for release asset: $ASSET_NAME"
+
+          # Fetch release and extract asset ID
+          release=$(gh api /repos/netfoundry/zlan-firewall-installer/releases/tags/v${VERSION})
+          asset_id=$(echo "$release" | jq ".assets[] | select(.name==\"$ASSET_NAME\") | .id")
+
+          if [[ -z "$asset_id" ]]; then
+            echo "Error: Asset '$ASSET_NAME' not found in release v${VERSION}"
+            exit 1
+          fi
+
+          echo "Found asset ID: $asset_id"
+
+          curl -L \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/netfoundry/zlan-firewall-installer/releases/assets/${asset_id}" \
+            -o "./$ASSET_NAME"
+
+          jf rt upload \
+            "./$ASSET_NAME" \
+            "netfoundry-private-deb/pool/${APP_NAME}/${DISTRO_NAME}/${ARCH}/" \
+            --url https://netfoundry.jfrog.io/artifactory/ \
+            --user "$JF_USER" \
+            --password "$JF_PASSWORD" \
+            --deb="${DISTRO_NAME}/main/${ARCH}" \
+            --recursive=false \
+            --flat=true
