@@ -63,6 +63,25 @@ jobs:
           name: artifact-${{ steps.release_info.outputs.app_name }}-${{ matrix.arch }}-deb
           path: ${{ steps.vars.outputs.deb_file }}
 
+  deploy_release:
+    runs-on: ubuntu-22.04
+    needs:
+      - build_amd64_release
+    strategy:
+      matrix:
+        goos: [linux]
+    steps:
+      - name: Create release
+        uses: ncipollo/release-action@v1.14.0
+        id: release
+        with:
+          draft: false
+          prerelease: false
+          tag: v${{ needs.build_amd64_release.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
   deploy_packages:
     runs-on: ubuntu-22.04
     needs:
