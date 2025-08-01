@@ -16,3 +16,9 @@ All notable changes to this project will be documented in this file. The format 
 ## Added
 
 - Added simple filebeats configuration
+
+# [1.0.2] - 2025-08-01
+
+## Changed
+
+- Change filebeats configuration installation to post install 
