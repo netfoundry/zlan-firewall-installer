@@ -1,0 +1,39 @@
+filebeat.inputs:
+
+# filestream is an input for collecting log messages from files.
+- type: filestream
+
+  # Unique ID among all inputs, an ID is required.
+  id: zfw-usage
+
+  # Change to true to enable this input configuration.
+  enabled: true
+
+  # Paths that should be crawled and fetched. Glob based paths.
+  paths:
+    - /var/log/zfw*.log
+  tags: ["zfw"]
+
+  name: <some sort of machine identifier>
+
+# Use `fields` for key-> values if there are any other system identifiers we can use later on
+# fields:
+  # some: value
+
+# ================================== Outputs ===================================
+
+# ------------------------------ Logstash Output -------------------------------
+output.logstash:
+  # The Logstash hosts
+  hosts: ["logstash.zfw:5000"]
+
+processors:
+  - decode_json_fields:
+      fields: ["message"]
+      target: "zfw"
+  - timestamp:
+      field: "zfw.interval_start_utc"
+      layouts:
+        - "UNIX"
+      target_field: "@timestamp"
+      timezone: "Local"
