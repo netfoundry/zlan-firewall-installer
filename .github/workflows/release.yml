@@ -40,8 +40,10 @@ jobs:
       - name: Setup build directories & copy files
         run: |
           mkdir -p ${{ steps.vars.outputs.deb_dir }}/DEBIAN
-          mkdir -p ${{ steps.vars.outputs.deb_dir }}/etc/filebeat/
-          cp configs/filebeat.yml ${{ steps.vars.outputs.deb_dir }}/etc/filebeat/filebeat.yml
+          cp scripts/postinst.sh ${{ steps.vars.outputs.deb_dir }}/DEBIAN/postinst
+          chmod 755 ${{ steps.vars.outputs.deb_dir }}/DEBIAN/postinst
+          mkdir -p ${{ steps.vars.outputs.deb_dir }}/opt/zlan-firewall/etc/
+          cp configs/filebeat.yml ${{ steps.vars.outputs.deb_dir }}/opt/zlan-firewall/etc/filebeat.yml
 
       - name: Generate control file
         run: |
