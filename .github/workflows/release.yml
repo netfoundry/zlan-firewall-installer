@@ -37,9 +37,11 @@ jobs:
           echo "deb_dir=${{ steps.release_info.outputs.app_name }}_${{ steps.release_info.outputs.version }}_${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
           echo "deb_file=${{ steps.release_info.outputs.app_name }}_${{ steps.release_info.outputs.version }}_${{ matrix.arch }}.deb" >> "$GITHUB_OUTPUT"
 
-      - name: Setup build directory
+      - name: Setup build directories & copy files
         run: |
           mkdir -p ${{ steps.vars.outputs.deb_dir }}/DEBIAN
+          mkdir -p ${{ steps.vars.outputs.deb_dir }}/etc/filebeat/
+          cp configs/filebeat.yml ${{ steps.vars.outputs.deb_dir }}/etc/filebeat/filebeat.yml
 
       - name: Generate control file
         run: |
